@@ -161,7 +161,6 @@ function App() {
     }
   }, [hat]);
 
-  console.log("heat", hat);
 
   return (
     <div>
