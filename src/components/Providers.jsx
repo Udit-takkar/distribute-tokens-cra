@@ -16,7 +16,7 @@ const { chains, publicClient, webSocketPublicClient } = configureChains(
       apiKey: process.env.REACT_APP_ALCHEMY_API_KEY ?? "",
     }),
     publicProvider(),
-  ]
+  ],
 );
 const { connectors } = getDefaultWallets({
   appName: "Distribute Tokens",

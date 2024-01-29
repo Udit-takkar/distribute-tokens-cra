@@ -123,11 +123,11 @@ function App() {
             wearer,
           });
           return isWearer ? wearer : null;
-        })
+        }),
       );
 
       const filteredActualWearersAddresses = actualWearersAddresses.filter(
-        (wearer) => wearer !== null
+        (wearer) => wearer !== null,
       );
 
       console.log("wearersAddresses", filteredActualWearersAddresses);
@@ -141,7 +141,7 @@ function App() {
             address: wearer,
             percentAllocation: equalPercentageAllocation,
           };
-        })
+        }),
       );
     } catch (err) {
       console.log("something went wrong", err);
@@ -154,13 +154,11 @@ function App() {
       fetch(toHTTP(hat.details))
         .then((res) => res.json())
         .then((data) => {
-          console.log("dat",data)
           setHatsDetails(data.data);
         })
         .catch((err) => console.log(err));
     }
   }, [hat]);
-
 
   return (
     <div>
