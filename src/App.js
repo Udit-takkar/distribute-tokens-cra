@@ -11,6 +11,9 @@ import { useEffect } from "react";
 import { useWalletClient, usePublicClient } from "wagmi";
 import { useSplitsClient } from "@0xsplits/splits-sdk-react";
 import { HatsClient } from "@hatsprotocol/sdk-v1-core";
+import { splitMainEthereumAbi } from "@0xsplits/splits-sdk/constants/abi";
+import { decodeEventLog } from "viem";
+import { toHTTP } from "./lib/utils";
 
 const SPLIT_ADDRESS = "0xA44c7B7A3F90E91aeb38Ea5a1Be22dd684a74d53";
 
@@ -47,12 +50,11 @@ const GET_HAT_WEARERS = gql`
 `;
 
 const TOKEN_ADDRESS = "0xdD69DB25F6D620A7baD3023c5d32761D353D3De9";
-const chainId = parseInt(process.env.REACT_APP_CHAIN_ID ?? "11155111");
+const chainId = parseInt(process.env.REACT_APP_CHAIN_ID ?? "5");
 
 // Goerli Hat Id:- 0x0000017900010001000100000000000000000000000000000000000000000000
 // Split Address:- "0x393F25EE10Ba041340615c427d78DfFA46F120af"
 // "0xA44c7B7A3F90E91aeb38Ea5a1Be22dd684a74d53"
-
 
 function App() {
   const [getHatWearers, { data, loading, error }] =
@@ -61,6 +63,7 @@ function App() {
   const [hatId, setHatId] = useState("");
   const [wearers, setWearers] = useState([]);
   const [hat, setHat] = useState();
+  const [hatsDetails, setHatsDetails] = useState();
 
   const [splitAddress, setSplitAddress] = useState();
   const [isLoading, setIsLoading] = useState(false);
@@ -73,12 +76,6 @@ function App() {
     publicClient: client,
     walletClient: walletClientRes.data ?? undefined,
   });
-
-  // const splitsClient = new SplitsClient({
-  //   chainId,
-  //   publicClient: client,
-  //   walletClient: walletClientRes.data ?? undefined,
-  // });
 
   const hatsClient = new HatsClient({
     chainId,
@@ -99,7 +96,7 @@ function App() {
       }
     };
     getMetadata();
-  }, [splitAddress]);
+  }, [splitAddress, splitsClient]);
 
   const handleGetWearers = async () => {
     try {
@@ -118,42 +115,28 @@ function App() {
       });
 
       const wearersAddresses = res.data.hat.wearers.map((wearer) => wearer.id);
-      const actualWearersAddresses = [];
 
-      for (const wearer of wearersAddresses) {
-        const isWearer = await hatsClient.isWearerOfHat({
-          hatId: hatId,
-          wearer,
-        });
-        if (isWearer) {
-          actualWearersAddresses.push(wearer);
-        }
-      }
+      const actualWearersAddresses = await Promise.all(
+        wearersAddresses.map(async (wearer) => {
+          const isWearer = await hatsClient.isWearerOfHat({
+            hatId: hatId,
+            wearer,
+          });
+          return isWearer ? wearer : null;
+        })
+      );
 
-      console.log("wearersAddresses", actualWearersAddresses);
+      const filteredActualWearersAddresses = actualWearersAddresses.filter(
+        (wearer) => wearer !== null
+      );
 
-      const totalWearers = actualWearersAddresses.length;
+      console.log("wearersAddresses", filteredActualWearersAddresses);
+
+      const totalWearers = filteredActualWearersAddresses.length;
       const equalPercentageAllocation = 100 / totalWearers;
 
-      // const args = {
-      //   recipients: actualWearersAddresses.map((wearer) => {
-      //     return {
-      //       address: wearer,
-      //       percentAllocation: equalPercentageAllocation,
-      //     };
-      //   }),
-
-      //   distributorFeePercent: 0.1,
-      //   controller: walletClientRes.data.account.address,
-      // };
-      // console.log("args", args);
-
-      // const response = await splitsClient.createSplit(args);
-      // setSplitAddress(response.splitAddress);
-      // console.log("splitsClient.createSplit", response);
-
       setWearers(
-        actualWearersAddresses.map((wearer) => {
+        filteredActualWearersAddresses.map((wearer) => {
           return {
             address: wearer,
             percentAllocation: equalPercentageAllocation,
@@ -166,27 +149,19 @@ function App() {
     setIsLoading(false);
   };
 
-  // const handleDistributeFunds = async () => {
-  //   try {
-  //     setIsLoading(true);
+  useEffect(() => {
+    if (hat?.details) {
+      fetch(toHTTP(hat.details))
+        .then((res) => res.json())
+        .then((data) => {
+          console.log("dat",data)
+          setHatsDetails(data.data);
+        })
+        .catch((err) => console.log(err));
+    }
+  }, [hat]);
 
-  //     if (!splitAddress) throw new Error("No split address");
-  //     if (!walletClientRes?.data?.account?.address)
-  //       throw new Error("No wallet connected");
-
-  //     const args = {
-  //       splitAddress,
-  //       token: TOKEN_ADDRESS,
-  //       distributorAddress: walletClientRes.data.account.address,
-  //     };
-
-  //     const response = await splitsClient.distributeToken(args);
-  //     console.log("res", response);
-  //   } catch (err) {
-  //     console.log("somethign went wrong", err);
-  //   }
-  //   setIsLoading(false);
-  // };
+  console.log("heat", hat);
 
   return (
     <div>
@@ -205,9 +180,32 @@ function App() {
             </Button>
             {/* <Button onClick={handleDistributeFunds}>Distribute Funds</Button> */}
           </div>
+          <div></div>
           {isLoading && <div>Loading...</div>}
-          {wearers.length > 0 && (
-            <div className="mt-4">
+          <div className="space-y-3 mt-4">
+            {hatsDetails && (
+              <>
+                <div>
+                  <p className="font-bold">Hats Name: </p>{" "}
+                  <p>{hatsDetails.name}</p>{" "}
+                </div>
+                <div>
+                  <p className="font-bold">Hats Description: </p>{" "}
+                  <p>{hatsDetails.description}</p>{" "}
+                </div>
+              </>
+            )}
+            {hat?.imageUri && (
+              <img
+                src={toHTTP(hat.imageUri)}
+                alt="Hat"
+                height={250}
+                width={250}
+              />
+            )}
+          </div>
+          {!splitAddress && wearers.length > 0 && (
+            <div className="mt-8">
               <CreateSplit
                 chainId={chainId}
                 defaultDistributorFee={0.1}
@@ -216,16 +214,33 @@ function App() {
                 displayChain={true}
                 width="sm"
                 theme="light"
-                onSuccess={(res) => {
-                  // setSplitAddress(res[0]?.address);
-                  console.log("res", res);
+                onSuccess={(events) => {
+                  console.log("events", events);
+
+                  const event = events.length > 0 ? events[0] : undefined;
+                  if (event) {
+                    const log = decodeEventLog({
+                      abi: splitMainEthereumAbi,
+                      data: event.data,
+                      topics: event.topics,
+                    });
+
+                    console.log("log", log);
+
+                    setSplitAddress(log.args.split);
+                  }
                 }}
               />
             </div>
           )}
           {splitAddress && (
-            <div className="mt-4">
-              <DisplaySplit theme="light" chainId={chainId} address={splitAddress} />
+            <div className="mt-8">
+              <p className="font-bold">Split Address: {splitAddress}</p>
+              <DisplaySplit
+                theme="light"
+                chainId={chainId}
+                address={splitAddress}
+              />
             </div>
           )}
         </Wrapper>
